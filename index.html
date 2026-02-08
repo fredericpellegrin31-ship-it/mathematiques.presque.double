@@ -368,12 +368,13 @@ class Ship {
         ctx.globalAlpha = this.opacity;
         ctx.translate(this.x, this.y);
         
-        // CORRECTION DE L'ORIENTATION : + Math.PI / 2 pour orienter la proue vers l'avant
-        ctx.rotate(this.angle + Math.PI / 2); 
+        // CORRECTION DE L'ORIENTATION : - Math.PI / 2 pour orienter la proue vers l'avant
+        ctx.rotate(this.angle - Math.PI / 2); 
         
         ctx.drawImage(this.img, -this.size/2, -this.size/2, this.size, this.size);
         
-        ctx.rotate(-(this.angle + Math.PI / 2));
+        // On annule la rotation pour que le texte reste droit
+        ctx.rotate(-(this.angle - Math.PI / 2));
         
         ctx.fillStyle = "white";
         ctx.strokeStyle = "black";
