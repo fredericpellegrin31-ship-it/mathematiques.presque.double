@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mission Presque Doubles - CE1</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #2980b9; font-family: 'Comic Sans MS', cursive, sans-serif; }
+        canvas { display: block; cursor: crosshair; }
+        
+        /* UI Globale */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* Barre de Temps */
+        #timer-container {
+            margin: 20px auto 0;
+            width: 60%;
+            max-width: 600px;
+            height: 30px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 15px;
+            border: 3px solid #fff;
+            overflow: hidden;
+            position: relative;
+        }
+        #timer-bar {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #2ecc71, #f1c40f, #e74c3c);
+            transition: width 0.1s linear;
+        }
+        #timer-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 20px;
+            color: white;
+            z-index: 2;
+        }
+
+        /* Score en jeu */
+        #score-display {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 15px;
+            border: 3px solid #f1c40f;
+            font-size: 28px;
+            font-weight: bold;
+            color: #2c3e50;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        /* Question */
+        #question-box {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 10px 40px;
+            border-radius: 20px;
+            border: 4px solid #d35400;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            margin: 10px auto;
+            display: inline-block;
+            pointer-events: auto;
+        }
+        #question-text {
+            font-size: 48px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 0;
+        }
+        #instruction {
+            font-size: 18px;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+
+        /* Écrans (Accueil & Fin) */
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(41, 128, 185, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+        .hidden { opacity: 0; pointer-events: none; }
+        
+        h1 { color: #f1c40f; font-size: 60px; text-shadow: 3px 3px 0 #2c3e50; margin-bottom: 20px; }
+        h2 { color: white; font-size: 40px; margin-bottom: 30px; }
+        .btn {
+            background: #e67e22; color: white;
+            font-size: 30px; padding: 15px 40px;
+            border: none; border-radius: 50px;
+            cursor: pointer;
+            border-bottom: 5px solid #d35400;
+            transition: transform 0.1s;
+        }
+        .btn:active { transform: translateY(4px); border-bottom: 1px solid #d35400; }
+        
+        #feedback {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 80px; font-weight: bold;
+            opacity: 0; pointer-events: none;
+            text-shadow: 4px 4px 0 #000;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Écran d'accueil -->
+<div id="start-screen" class="screen">
+    <h1>Mission Presque Doubles</h1>
+    <h2>Prêt à défendre l'île ?</h2>
+    <button class="btn" onclick="startGame()">JOUER</button>
+</div>
+
+<!-- Écran de fin -->
+<div id="end-screen" class="screen hidden">
+    <h1>Terminé !</h1>
+    <h2 id="final-score">Score : 0</h2>
+    <button class="btn" onclick="startGame()">REJOUER</button>
+</div>
+
+<!-- Interface Jeu -->
+<div id="ui-layer">
+    <div style="text-align: center;">
+        <div id="timer-container">
+            <span id="timer-icon">⏳ Temps</span>
+            <div id="timer-bar"></div>
+        </div>
+        <div id="question-box" class="hidden">
+            <p id="question-text">?</p>
+            <div id="instruction">Coule le bon résultat !</div>
+        </div>
+    </div>
+    <div id="score-display">Score: 0</div>
+</div>
+
+<div id="feedback"></div>
+
+<script>
+/** @type {HTMLCanvasElement} */
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d');
+document.body.appendChild(canvas);
+
+// --- Configuration Globale ---
+let gameState = 'start'; // start, playing, gameover
+let score = 0;
+let gameDuration = 120; // 2 minutes
+let timeRemaining = 0;
+let lastTime = 0;
+
+const assets = {
+    ships: [],
+    cannon: new Image(),
+    ball: new Image(),
+    island: new Image()
+};
+
+// Chargement des assets
+const shipFiles = ['ship (1).png', 'ship (2).png', 'ship (3).png', 'ship (4).png', 'ship (5).png', 'ship (6).png'];
+shipFiles.forEach(src => {
+    const img = new Image();
+    img.src = src;
+    assets.ships.push(img);
+});
+assets.cannon.src = 'cannonMobile.png';
+assets.ball.src = 'cannonBall.png';
+assets.island.src = 'ile.png';
+
+let currentQuestion = { a: 0, b: 0, answer: 0 };
+let ships = [];
+let cannonballs = [];
+let particles = [];
+let floatingTexts = []; // Pour les +10 et -5
+let waves = [];
+let cannonRotation = 0;
+let globalTime = 0;
+
+const islandSize = 250; 
+const center = { x: 0, y: 0 };
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    center.x = canvas.width / 2;
+    center.y = canvas.height / 2;
+    if(waves.length === 0) generateWaves();
+}
+window.addEventListener('resize', resize);
+
+// --- Vagues Dynamiques ---
+function generateWaves() {
+    waves = [];
+    for(let i = 0; i < 50; i++) {
+        waves.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            length: 20 + Math.random() * 40,
+            speed: 0.5 + Math.random() * 1.5,
+            amplitude: 2 + Math.random() * 5,
+            offset: Math.random() * Math.PI * 2
+        });
+    }
+}
+
+// --- Logique de Jeu ---
+function startGame() {
+    gameState = 'playing';
+    score = 0;
+    document.getElementById('score-display').innerText = `Score: ${score}`;
+    timeRemaining = gameDuration;
+    
+    ships = [];
+    cannonballs = [];
+    particles = [];
+    floatingTexts = [];
+    
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('end-screen').classList.add('hidden');
+    document.getElementById('question-box').classList.remove('hidden');
+    
+    generateQuestion();
+    resize();
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop); // Démarrage propre de la boucle
+}
+
+function endGame() {
+    gameState = 'gameover';
+    document.getElementById('end-screen').classList.remove('hidden');
+    document.getElementById('question-box').classList.add('hidden');
+    document.getElementById('final-score').innerText = `Score Final : ${score}`;
+}
+
+function generateQuestion() {
+    if(gameState !== 'playing') return;
+    
+    const a = Math.floor(Math.random() * 9) + 1; 
+    const b = Math.random() > 0.5 ? a + 1 : a - 1;
+    const valB = b < 1 ? a + 1 : b; 
+    
+    currentQuestion = { a, b: valB, answer: a + valB };
+    document.getElementById('question-text').innerText = `${a} + ${valB} = ?`;
+    
+    ships = [];
+    const answers = [currentQuestion.answer];
+    
+    while(answers.length < 3) {
+        let fake = currentQuestion.answer + (Math.floor(Math.random() * 5) - 2);
+        if(fake > 0 && !answers.includes(fake)) answers.push(fake);
+    }
+    
+    answers.sort(() => Math.random() - 0.5);
+    answers.forEach((val) => {
+        ships.push(new Ship(val, val === currentQuestion.answer));
+    });
+}
+
+// --- Classes ---
+class FloatingText {
+    constructor(x, y, text, color) {
+        this.x = x;
+        this.y = y;
+        this.text = text;
+        this.color = color;
+        this.life = 1.0;
+        this.vy = -1.5; // Monte vers le haut
+    }
+    update() {
+        this.y += this.vy;
+        this.life -= 0.02;
+    }
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 3;
+        ctx.font = "bold 40px 'Comic Sans MS', Arial";
+        ctx.textAlign = "center";
+        ctx.strokeText(this.text, this.x, this.y);
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.restore();
+    }
+}
+
+class Ship {
+    constructor(value, isCorrect) {
+        this.value = value;
+        this.isCorrect = isCorrect;
+        this.img = assets.ships[Math.floor(Math.random() * assets.ships.length)];
+        this.resetPosition();
+        
+        const angleToCenter = Math.atan2(center.y - this.y, center.x - this.x);
+        this.angle = angleToCenter + (Math.random() - 0.5); 
+        
+        this.speed = 0.4 + Math.random() * 0.4; 
+        this.turnTimer = 0;
+        this.sinking = false;
+        this.opacity = 1;
+        this.size = 80;
+    }
+
+    resetPosition() {
+        let dist = 0;
+        while(dist < islandSize * 1.5) {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            dist = Math.hypot(this.x - center.x, this.y - center.y);
+        }
+    }
+
+    update() {
+        if (this.sinking) {
+            this.opacity -= 0.015;
+            this.size *= 0.99;
+            return;
+        }
+
+        if (this.turnTimer <= 0) {
+            this.targetAngle = this.angle + (Math.random() - 0.5);
+            this.turnTimer = 100 + Math.random() * 200;
+        }
+        this.turnTimer--;
+        this.angle += (this.targetAngle - this.angle) * 0.02;
+
+        const nextX = this.x + Math.cos(this.angle) * this.speed;
+        const nextY = this.y + Math.sin(this.angle) * this.speed;
+
+        const distToCenter = Math.hypot(nextX - center.x, nextY - center.y);
+        if (distToCenter < (islandSize/2 + 40)) {
+            this.targetAngle = Math.atan2(this.y - center.y, this.x - center.x);
+        }
+
+        this.x += Math.cos(this.angle) * this.speed;
+        this.y += Math.sin(this.angle) * this.speed;
+
+        if (this.x < -50 || this.x > canvas.width + 50 || this.y < -50 || this.y > canvas.height + 50) {
+             this.targetAngle = Math.atan2(center.y - this.y, center.x - this.x);
+        }
+    }
+
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.opacity;
+        ctx.translate(this.x, this.y);
+        
+        // CORRECTION DE L'ORIENTATION : + Math.PI / 2 pour orienter la proue vers l'avant
+        ctx.rotate(this.angle + Math.PI / 2); 
+        
+        ctx.drawImage(this.img, -this.size/2, -this.size/2, this.size, this.size);
+        
+        ctx.rotate(-(this.angle + Math.PI / 2));
+        
+        ctx.fillStyle = "white";
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 4;
+        ctx.font = "bold 28px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.strokeText(this.value, 0, 0);
+        ctx.fillText(this.value, 0, 0);
+        ctx.restore();
+    }
+}
+
+class CannonBall {
+    constructor(x, y, targetX, targetY) {
+        this.x = x;
+        this.y = y;
+        const angle = Math.atan2(targetY - y, targetX - x);
+        this.vx = Math.cos(angle) * 12;
+        this.vy = Math.sin(angle) * 12;
+        this.life = 100;
+    }
+    update() { this.x += this.vx; this.y += this.vy; this.life--; }
+    draw() { ctx.drawImage(assets.ball, this.x - 10, this.y - 10, 20, 20); }
+}
+
+function showFeedback(text, color) {
+    const el = document.getElementById('feedback');
+    el.innerText = text;
+    el.style.color = color;
+    el.style.opacity = 1;
+    setTimeout(() => el.style.opacity = 0, 800);
+}
+
+function createExplosion(x, y) {
+    for(let i=0; i<25; i++) {
+        particles.push({
+            x, y,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10,
+            life: 1.0,
+            color: Math.random() > 0.5 ? '#e67e22' : '#f1c40f',
+            size: 3 + Math.random() * 6
+        });
+    }
+}
+
+// --- Input ---
+window.addEventListener('mousedown', (e) => {
+    if(gameState !== 'playing') return;
+    const angle = Math.atan2(e.clientY - center.y, e.clientX - center.x);
+    cannonRotation = angle;
+    cannonballs.push(new CannonBall(center.x, center.y, e.clientX, e.clientY));
+});
+
+window.addEventListener('mousemove', (e) => {
+    if(gameState !== 'playing') return;
+    cannonRotation = Math.atan2(e.clientY - center.y, e.clientX - center.x);
+});
+
+// --- Boucle Principale ---
+function gameLoop(timestamp) {
+    if (gameState === 'gameover') return; 
+    
+    // Initialisation du timestamp s'il manque (sécurité)
+    if (!timestamp) timestamp = performance.now();
+
+    const dt = (timestamp - lastTime) / 1000;
+    lastTime = timestamp;
+    globalTime += 0.05;
+
+    // Gestion du temps
+    if(gameState === 'playing') {
+        timeRemaining -= dt;
+        if(timeRemaining <= 0) {
+            timeRemaining = 0;
+            endGame();
+        }
+        const pct = (timeRemaining / gameDuration) * 100;
+        document.getElementById('timer-bar').style.width = `${pct}%`;
+        
+        const bar = document.getElementById('timer-bar');
+        if(pct < 20) bar.style.background = '#c0392b';
+        else if(pct < 50) bar.style.background = '#f39c12';
+        else bar.style.background = 'linear-gradient(90deg, #2ecc71, #f1c40f, #e74c3c)';
+    }
+
+    // Effacement
+    ctx.fillStyle = '#3498db';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // --- Rendu Vagues ---
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    waves.forEach(w => {
+        w.x += w.speed;
+        if(w.x > canvas.width) w.x = -w.length;
+        const waveY = w.y + Math.sin(globalTime + w.offset) * w.amplitude;
+        ctx.moveTo(w.x, waveY);
+        ctx.quadraticCurveTo(w.x + w.length/2, waveY - 10, w.x + w.length, waveY);
+    });
+    ctx.stroke();
+
+    // --- Île & Canon ---
+    if (assets.island.complete) ctx.drawImage(assets.island, center.x - islandSize/2, center.y - islandSize/2, islandSize, islandSize);
+
+    ctx.save();
+    ctx.translate(center.x, center.y);
+    ctx.rotate(cannonRotation);
+    ctx.drawImage(assets.cannon, -25, -25, 50, 50);
+    ctx.restore();
+
+    // --- Bateaux ---
+    ships.forEach((ship, index) => {
+        ship.update();
+        ship.draw();
+        if (ship.opacity <= 0) ships.splice(index, 1);
+    });
+
+    // --- Boulets & Collisions ---
+    cannonballs.forEach((ball, bIdx) => {
+        ball.update();
+        ball.draw();
+        
+        let hit = false;
+        ships.forEach((ship) => {
+            if (!hit && !ship.sinking && Math.hypot(ball.x - ship.x, ball.y - ship.y) < 40) {
+                hit = true;
+                createExplosion(ship.x, ship.y);
+                
+                if (ship.isCorrect) {
+                    score += 10; 
+                    ship.sinking = true;
+                    showFeedback("Bravo!", "#2ecc71");
+                    // Texte flottant Vert
+                    floatingTexts.push(new FloatingText(ship.x, ship.y, "+10", "#2ecc71"));
+                    setTimeout(generateQuestion, 800);
+                } else {
+                    score = Math.max(0, score - 5); 
+                    ship.sinking = true;
+                    showFeedback("Oups!", "#e74c3c");
+                    // Texte flottant Rouge
+                    floatingTexts.push(new FloatingText(ship.x, ship.y, "-5", "#e74c3c"));
+                }
+                // Mise à jour du score
+                document.getElementById('score-display').innerText = `Score: ${score}`;
+            }
+        });
+        if (hit || ball.life <= 0) cannonballs.splice(bIdx, 1);
+    });
+
+    // --- Particules & Textes Flottants ---
+    particles.forEach((p, index) => {
+        p.x += p.vx; p.y += p.vy; p.life -= 0.03;
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+        if(p.life <= 0) particles.splice(index, 1);
+    });
+
+    floatingTexts.forEach((ft, index) => {
+        ft.update();
+        ft.draw();
+        if(ft.life <= 0) floatingTexts.splice(index, 1);
+    });
+
+    ctx.globalAlpha = 1;
+
+    requestAnimationFrame(gameLoop);
+}
+
+// Init
+resize();
+</script>
+</body>
+</html>
